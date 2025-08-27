@@ -47,6 +47,20 @@ Hooks.once('ready', () => {
  * @function registerModuleSettings
  */
 function registerModuleSettings() {
+  // Legacy setting - kept for compatibility but deprecated
+  game.settings.register(MODULE_ID, 'yAdjustment', {
+    name: 'GURPS_GRAPPLE_PARTY.settings.yAdjustment.name',
+    hint: 'GURPS_GRAPPLE_PARTY.settings.yAdjustment.hint', 
+    scope: 'world',
+    config: true,
+    type: Number,
+    default: -10,
+    onChange: value => {
+      console.log(`${MODULE_ID} | Y Adjustment changed to: ${value} (deprecated)`);
+      GrappleUtils.updateYAdjustment(value);
+    }
+  });
+
 
 
   // Paired token scale setting - now configurable
@@ -106,7 +120,7 @@ class TokenResetDialog extends FormApplication {
     return foundry.utils.mergeObject(super.defaultOptions, {
       id: 'gurps-grapple-party-reset',
       title: game.i18n.localize('GURPS_GRAPPLE_PARTY.dialog.resetTokens.title'),
-      template: `modules/${MODULE_ID}/templates/dialog-confirm.html`,
+      template: 'templates/dialog-confirm.html',
       width: 400,
       height: 'auto',
       classes: ['gurps-grapple-party-reset']
@@ -118,7 +132,22 @@ class TokenResetDialog extends FormApplication {
    * @returns {Object} Template data
    */
   getData() {
-    return {};
+    return {
+      title: game.i18n.localize('GURPS_GRAPPLE_PARTY.dialog.resetTokens.title'),
+      content: game.i18n.localize('GURPS_GRAPPLE_PARTY.dialog.resetTokens.content'),
+      buttons: {
+        reset: {
+          icon: '<i class="fas fa-undo-alt"></i>',
+          label: game.i18n.localize('GURPS_GRAPPLE_PARTY.dialog.resetTokens.reset'),
+          callback: () => this.resetAllTokens()
+        },
+        cancel: {
+          icon: '<i class="fas fa-times"></i>',
+          label: game.i18n.localize('GURPS_GRAPPLE_PARTY.dialog.resetTokens.cancel')
+        }
+      },
+      default: 'cancel'
+    };
   }
 
   /**

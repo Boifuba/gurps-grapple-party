@@ -1,0 +1,52 @@
+<form class="flexcol">
+    <div class="form-group text-content-column">
+        <p><strong>{{localize "GURPS_GRAPPLE_PARTY.dialog.resetTokens.warning"}}</strong></p>
+        <p>{{localize "GURPS_GRAPPLE_PARTY.dialog.resetTokens.description"}}</p>
+        <ul>
+            <li>{{localize "GURPS_GRAPPLE_PARTY.dialog.resetTokens.action1"}}</li>
+            <li>{{localize "GURPS_GRAPPLE_PARTY.dialog.resetTokens.action2"}}</li>
+            <li>{{localize "GURPS_GRAPPLE_PARTY.dialog.resetTokens.action3"}}</li>
+        </ul>
+        <p>{{localize "GURPS_GRAPPLE_PARTY.dialog.resetTokens.confirm"}}</p>
+    </div>
+    <div class="form-group flexrow" style="justify-content: space-between; gap: 10px;">
+        <button type="button" name="reset" data-button="reset" class="dialog-button">
+            <i class="fas fa-undo-alt"></i> {{localize "GURPS_GRAPPLE_PARTY.dialog.resetTokens.reset"}}
+        </button>
+        <button type="button" name="cancel" data-button="cancel" class="dialog-button">
+            <i class="fas fa-times"></i> {{localize "GURPS_GRAPPLE_PARTY.dialog.resetTokens.cancel"}}
+        </button>
+    </div>
+</form>
+
+<style>
+.gurps-grapple-party-reset .text-content-column {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.gurps-grapple-party-reset .text-content-column p {
+    margin: 0;
+    line-height: 1.4;
+}
+
+.gurps-grapple-party-reset .text-content-column ul {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.gurps-grapple-party-reset .text-content-column ul li {
+    margin: 5px 0;
+}
+
+.gurps-grapple-party-reset .dialog-button {
+    flex: 1;
+    padding: 8px 16px;
+    margin: 0;
+}
+
+.gurps-grapple-party-reset .form-group.flexrow {
+    margin-top: 15px;
+}
+</style>

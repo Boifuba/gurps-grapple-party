@@ -1,18 +1,44 @@
 {
-  "gurps-grapple-party": {
+  "GURPS_GRAPPLE_PARTY": {
     "settings": {
       "yAdjustment": {
-        "name": "Vertical Adjustment",
-        "hint": "Vertical adjustment in pixels for token positioning (negative moves up, positive moves down)"
+        "name": "Vertical Adjustment (Deprecated)",
+        "hint": "This setting is deprecated and will be removed in a future version. Vertical adjustment in pixels for token positioning (negative moves up, positive moves down)"
       },
-      "soloScale": {
-        "name": "Solo Token Scale",
-        "hint": "Scale for tokens when alone in a hex"
-      },
+   
       "pairScale": {
-        "name": "Pair Token Scale", 
-        "hint": "Scale for tokens when two are in the same hex"
+        "name": "Paired Token Scale", 
+        "hint": "Scale applied to tokens when multiple tokens occupy the same hex. Default: 0.4 (40% of normal size)"
+      },
+      "centerDistance": {
+        "name": "Center Distance",
+        "hint": "How far to push tokens away from hex center when positioning (as fraction of grid size). Negative values pull toward center, positive push away. Default: -0.10"
+      },
+      "resetTokensMenu": {
+        "name": "Reset All Tokens",
+        "hint": "Utility to reset all tokens in the current scene to scale 1.0",
+        "label": "Open Token Reset Dialog"
       }
+    },
+    "dialog": {
+      "resetTokens": {
+        "title": "Reset All Tokens",
+        "warning": "Warning: This will reset ALL tokens in the current scene to scale 1.0.",
+        "description": "This action will:",
+        "action1": "Set all tokens to normal scale (1.0)",
+        "action2": "Clear module positioning data", 
+        "action3": "Cannot be undone",
+        "confirm": "Are you sure you want to continue?",
+        "reset": "Reset All Tokens",
+        "cancel": "Cancel"
+      }
+    },
+    "notifications": {
+      "noScene": "No active scene found. Please load a scene first.",
+      "noTokens": "No tokens found in the current scene.",
+      "resettingTokens": "Resetting {count} tokens to scale 1.0...",
+      "tokensReset": "Successfully reset {count} tokens to normal scale.",
+      "resetError": "Error occurred while resetting tokens. Check the console for details."
     }
   }
 }

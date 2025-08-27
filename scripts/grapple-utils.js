@@ -1,90 +1,282 @@
 /**
- * GURPS Grapple Party Utilities — token do meio NÃO mexe; newcomer = midpoint + offset (esquerda/cima) + afastamento radial
- * STATIC: Eu usei static aqui por pura preguiça de não ter que instanciar, e deixar o método pertecendo à classe e não ao objeto criado por ele, ficou muito mais leve, isso nunca deve acontecer mas eu posso ter estados concorrentes e fritar o foundry com um monte de ojeto em looping, estranhamente esse método não triggou loops
+ * GURPS Grapple Party Utilities
  * 
- * STATIC STATE = Único e global 
+ * Handles automatic token scaling and positioning in hexagonal grids during GURPS combat.
+ * Features intelligent token arrangement where the first token in a hex stays in place,
+ * and newcomers are positioned using midpoint calculation with configurable offsets.
  * 
- * O módulo é singleton, NÃO VAI HAVER DOIS RODANDO ELE GERENCIA TUDO 
+ * Key behaviors:
+ * - Token in the center DOES NOT move; newcomer moves to midpoint + offset + radial push
+ * - Uses STATIC methods for performance (singleton pattern, no concurrent states)
+ * - Module is singleton and manages everything globally
+ * 
+ * @author GURPS Community
+ * @version 1.0.0
+ * @since Foundry VTT v13+
  */
 
+/**
+ * Main utility class for GURPS Grapple Party functionality
+ * All methods are static to maintain single global state and prevent concurrent execution issues
+ * 
+ * @class GrappleUtils
+ */
 export class GrappleUtils {
+  /**
+   * Module identifier constant
+   * @static
+   * @constant {string}
+   */
   static MODULE_ID = 'gurps-grapple-party';
+  
+  /**
+   * Global namespace for state management
+   * @static
+   * @constant {string}
+   */
   static NAMESPACE = 'hex-scale-face-fixed';
 
-  // DESLOCAMENTO DO NEWCOMER (fração do grid): negativo = esquerda/cima
-  // mover isso para um CONSTANTS 
-  static NEWCOMER_OFFSET_GRID_FRAC_X = -0.30; // ajuste livre
-  static NEWCOMER_OFFSET_GRID_FRAC_Y = -0.30; // ajuste livre
+  /**
+   * Default horizontal offset for newcomer positioning (fraction of grid)
+   * Negative values move left, positive move right
+   * @static
+   * @constant {number}
+   */
+  static NEWCOMER_OFFSET_GRID_FRAC_X = -0.30;
+  
+  /**
+   * Default vertical offset for newcomer positioning (fraction of grid)  
+   * Negative values move up, positive move down
+   * @static
+   * @constant {number}
+   */
+  static NEWCOMER_OFFSET_GRID_FRAC_Y = -0.30;
 
-  // AFASTAMENTO RADIAL a partir do centro do HEX de destino, ao longo da linha de entrada
-  // (0.0 = sem afastar; 0.20 = ~20% do grid pra longe do centro)
-  // mover isso para um CONSTANTS 
-  static NEWCOMER_PUSH_GRID_FRAC = -0.10;
-
+  /**
+   * Global state management object
+   * Maintains all module state including hooks, cell occupancy, and pending operations
+   * 
+   * @static
+   * @type {Object}
+   * @property {Object} hooks - Registered Foundry hooks
+   * @property {Map<string, Set<string>>} cells - Maps cell keys to sets of token IDs
+   * @property {Map<string, Object>} pending - Pending token movements with metadata
+   * @property {Set<string>} busy - Token IDs currently being updated
+   * @property {Map<string, string>} firstInCell - Maps cell keys to first token ID in cell
+   * @property {Set<string>} arrangedTokens - Token IDs that have been arranged by the module
+   */
   static state = {
     hooks: {},
-    cells: new Map(),        // key -> Set(tokenId)
-    pending: new Map(),      // tokenId -> { oldKey, newKey, oldCenter, newCenter }
+    cells: new Map(),
+    pending: new Map(),
     busy: new Set(),
-    firstInCell: new Map(),  // key -> tokenId (primeiro que entrou nesse hex)
+    firstInCell: new Map(),
     arrangedTokens: new Set()
   };
 
-  // ---------- Helpers ----------
+  // ========== Helper Methods ==========
+
+  /**
+   * Get approximate scale value from a token document
+   * Checks multiple scale properties and returns their average
+   * 
+   * @static
+   * @param {TokenDocument} tokenDoc - The token document to analyze
+   * @returns {number} Average scale value, defaults to 1.0 if no scale found
+   */
   static getApproximateScale(tokenDoc) {
-    const v = [];
-    //fugindo de typescript
-    if (typeof tokenDoc.scale === 'number') v.push(tokenDoc.scale);
-    if (typeof tokenDoc.texture?.scaleX === 'number') v.push(tokenDoc.texture.scaleX);
-    if (typeof tokenDoc.texture?.scaleY === 'number') v.push(tokenDoc.texture.scaleY);
-    return v.length ? v.reduce((a,b)=>a+b,0)/v.length : 1;
+    const values = [];
+    
+    if (typeof tokenDoc.scale === 'number') values.push(tokenDoc.scale);
+    if (typeof tokenDoc.texture?.scaleX === 'number') values.push(tokenDoc.texture.scaleX);
+    if (typeof tokenDoc.texture?.scaleY === 'number') values.push(tokenDoc.texture.scaleY);
+    
+    return values.length ? values.reduce((a, b) => a + b, 0) / values.length : 1;
   }
 
-  static getPixelSize(tokenDoc, s) {
-    /*
-    Ele está aloprando com canvas muito grandes, o NEWCOMER_PUSH_GRID_FRAC é uma porcentagem mas eu não pq diabos parece estar exponencial e eu não sei resolver isso
-      */
-    const gs = canvas.grid.size;
-    return { w: (tokenDoc.width ?? 1) * gs * s, h: (tokenDoc.height ?? 1) * gs * s };
+  /**
+   * Calculate pixel size of a token at a given scale
+   * 
+   * @static
+   * @param {TokenDocument} tokenDoc - The token document
+   * @param {number} scale - Scale factor to apply
+   * @returns {Object} Object with width and height in pixels
+   * @property {number} w - Width in pixels
+   * @property {number} h - Height in pixels
+   */
+  static getPixelSize(tokenDoc, scale) {
+    const gridSize = canvas.grid.size;
+    return {
+      w: (tokenDoc.width ?? 1) * gridSize * scale,
+      h: (tokenDoc.height ?? 1) * gridSize * scale
+    };
   }
 
-  static keyFromXY(x, y, w=1, h=1) {
-    const gs = canvas.grid.size;
-    const cx = x + (w*gs)/2, cy = y + (h*gs)/2;
-    const [col, row] = canvas.grid.getGridPositionFromPixels(cx, cy);
+  /**
+   * Generate grid cell key from pixel coordinates
+   * 
+   * @static
+   * @param {number} x - X coordinate in pixels
+   * @param {number} y - Y coordinate in pixels
+   * @param {number} [width=1] - Token width in grid units
+   * @param {number} [height=1] - Token height in grid units
+   * @returns {string} Grid cell key in format "col,row"
+   */
+  static keyFromXY(x, y, width = 1, height = 1) {
+    const gridSize = canvas.grid.size;
+    const centerX = x + (width * gridSize) / 2;
+    const centerY = y + (height * gridSize) / 2;
+    const [col, row] = canvas.grid.getGridPositionFromPixels(centerX, centerY);
     return `${col},${row}`;
   }
-  static keyFromDoc(tokenDoc) { return this.keyFromXY(tokenDoc.x ?? 0, tokenDoc.y ?? 0, tokenDoc.width ?? 1, tokenDoc.height ?? 1); }
-// Fórmula basica snippet do Size Matters, cálculo geométrico simples convertido para static
+
+  /**
+   * Generate grid cell key from token document
+   * 
+   * @static
+   * @param {TokenDocument} tokenDoc - The token document
+   * @returns {string} Grid cell key in format "col,row"
+   */
+  static keyFromDoc(tokenDoc) {
+    return this.keyFromXY(
+      tokenDoc.x ?? 0,
+      tokenDoc.y ?? 0,
+      tokenDoc.width ?? 1,
+      tokenDoc.height ?? 1
+    );
+  }
+
+  /**
+   * Calculate center pixel coordinates from grid cell key
+   * Uses multiple fallback methods for cross-version compatibility
+   * 
+   * @static
+   * @param {string} key - Grid cell key in format "col,row"
+   * @returns {Object} Center coordinates in pixels
+   * @property {number} x - X coordinate of hex center
+   * @property {number} y - Y coordinate of hex center
+   */
   static centerFromKey(key) {
     const [col, row] = key.split(',').map(Number);
+    const halfGrid = canvas.grid.size / 2;
+
+    // Try modern API first
     if (canvas.grid.getPixelsFromGridPosition) {
       const [x, y] = canvas.grid.getPixelsFromGridPosition(col, row);
-      return { x: x + canvas.grid.size/2, y: y + canvas.grid.size/2 };
+      return { x: x + halfGrid, y: y + halfGrid };
     }
+
+    // Fallback for older versions
     if (canvas.grid.getTopLeftPoint) {
-      const p = canvas.grid.getTopLeftPoint({ col, row });
-      return { x: p.x + canvas.grid.size/2, y: p.y + canvas.grid.size/2 };
+      const point = canvas.grid.getTopLeftPoint({ col, row });
+      return { x: point.x + halfGrid, y: point.y + halfGrid };
     }
+
+    // Legacy fallback
     const [x0, y0] = canvas.grid.getTopLeft(col, row);
-    return { x: x0 + canvas.grid.size/2, y: y0 + canvas.grid.size/2 };
+    return { x: x0 + halfGrid, y: y0 + halfGrid };
   }
 
-  static midpoint(a, b) { return { x: (a.x + b.x)/2, y: (a.y + b.y)/2 }; }
+  /**
+   * Calculate midpoint between two coordinate objects
+   * 
+   * @static
+   * @param {Object} pointA - First coordinate point
+   * @param {number} pointA.x - X coordinate
+   * @param {number} pointA.y - Y coordinate
+   * @param {Object} pointB - Second coordinate point
+   * @param {number} pointB.x - X coordinate
+   * @param {number} pointB.y - Y coordinate
+   * @returns {Object} Midpoint coordinates
+   * @property {number} x - Midpoint X coordinate
+   * @property {number} y - Midpoint Y coordinate
+   */
+  static midpoint(pointA, pointB) {
+    return {
+      x: (pointA.x + pointB.x) / 2,
+      y: (pointA.y + pointB.y) / 2
+    };
+  }
 
+  /**
+   * Safely update a token document while preventing infinite loops
+   * Manages busy state to prevent concurrent updates on the same token
+   * 
+   * @static
+   * @async
+   * @param {TokenDocument} tokenDoc - Token document to update
+   * @param {Object} updateData - Update data object
+   * @throws {Error} If update fails
+   */
   static async updateTokenSafe(tokenDoc, updateData) {
     if (this.state.busy.has(tokenDoc.id)) return;
+    
     this.state.busy.add(tokenDoc.id);
-    try { await tokenDoc.update(updateData); this.state.arrangedTokens.add(tokenDoc.id); }
-    finally { this.state.busy.delete(tokenDoc.id); }
+    try {
+      await tokenDoc.update(updateData);
+      this.state.arrangedTokens.add(tokenDoc.id);
+    } finally {
+      this.state.busy.delete(tokenDoc.id);
+    }
   }
 
-  static async setScaleOnly(tokenDoc, s) {
-    if (Math.abs(this.getApproximateScale(tokenDoc) - s) <= 0.01) return;
-    await this.updateTokenSafe(tokenDoc, { scale: s, 'texture.scaleX': s, 'texture.scaleY': s });
+  /**
+   * Set only the scale properties of a token
+   * Checks if scale change is significant before updating
+   * 
+   * @static
+   * @async
+   * @param {TokenDocument} tokenDoc - Token document to scale
+   * @param {number} scale - New scale value
+   */
+  static async setScaleOnly(tokenDoc, scale) {
+    if (Math.abs(this.getApproximateScale(tokenDoc) - scale) <= 0.01) return;
+    
+    await this.updateTokenSafe(tokenDoc, {
+      scale: scale,
+      'texture.scaleX': scale,
+      'texture.scaleY': scale
+    });
   }
 
-  // ---------- Lifecycle ----------
+  /**
+   * Get current pair scale setting from game settings
+   * 
+   * @static
+   * @returns {number} Scale value for paired tokens
+   */
+  static getPairScale() {
+    return game.settings.get(this.MODULE_ID, 'pairScale') ?? 0.4;
+  }
+
+  /**
+   * Get current solo scale setting from game settings
+   * 
+   * @static
+   * @returns {number} Scale value for solo tokens
+   */
+  static getSoloScale() {
+    return game.settings.get(this.MODULE_ID, 'soloScale') ?? 1.0;
+  }
+
+  /**
+   * Get current center distance setting from game settings
+   * 
+   * @static
+   * @returns {number} Distance from center as grid fraction
+   */
+  static getCenterDistance() {
+    return game.settings.get(this.MODULE_ID, 'centerDistance') ?? -0.10;
+  }
+
+  // ========== Lifecycle Management ==========
+
+  /**
+   * Initialize the entire grapple system
+   * Sets up clean state, bootstraps existing tokens, and registers hooks
+   * 
+   * @static
+   */
   static initialize() {
     console.log(`${this.MODULE_ID} | Initializing GrappleUtils`);
     this.cleanup();
@@ -92,11 +284,20 @@ export class GrappleUtils {
     this.registerHooks();
     ui.notifications.info("GURPS Grapple Party: Initialized successfully");
   }
-// O Cleanup é necessário para remover as açoes do hook depois de terminar, para ele não ficar com muitos hooks ativos numa mesma sessão. Evita travamentos. 
+
+  /**
+   * Clean up existing state and hooks
+   * Essential for preventing memory leaks and duplicate hooks in same session
+   * 
+   * @static
+   */
   static cleanup() {
     if (window[this.NAMESPACE]?.hooks) {
-      for (const [hookName, hookId] of Object.entries(window[this.NAMESPACE].hooks)) Hooks.off(hookName, hookId);
+      for (const [hookName, hookId] of Object.entries(window[this.NAMESPACE].hooks)) {
+        Hooks.off(hookName, hookId);
+      }
     }
+    
     this.state.cells.clear();
     this.state.pending.clear();
     this.state.busy.clear();
@@ -105,203 +306,332 @@ export class GrappleUtils {
     window[this.NAMESPACE] = this.state;
   }
 
+  /**
+   * Bootstrap existing tokens in the scene
+   * Populates cell tracking without moving or scaling existing tokens
+   * 
+   * @static
+   */
   static bootstrap() {
     if (!canvas.scene) return;
-    const tokens = canvas.scene.tokens.contents.filter(td => !td.hidden);
-    for (const td of tokens) {
-      const key = this.keyFromDoc(td);
-      this.addToCell(key, td.id);
-      // bootstrap NÃO move, NÃO recenter, NÃO muda escala caralho!
+    
+    const tokens = canvas.scene.tokens.contents.filter(tokenDoc => !tokenDoc.hidden);
+    for (const tokenDoc of tokens) {
+      const key = this.keyFromDoc(tokenDoc);
+      this.addToCell(key, tokenDoc.id);
+      // Bootstrap NEVER moves, centers, or changes scale!
     }
   }
-/* eu não sei por que eu preciso de um this aqui, o que acontece se eu passar isso como parâmetro? 
-   eu vi esse jeito em um código de um outro módulo, fiz igual e deu certo. Ficou bonito.
-*/
+
+  /**
+   * Register all necessary Foundry hooks
+   * Uses arrow functions to maintain proper 'this' context
+   * 
+   * @static
+   */
   static registerHooks() {
-    this.state.hooks.preUpdate = Hooks.on('preUpdateToken', (tokenDoc, changes) => this.handlePreUpdateToken(tokenDoc, changes));
-    this.state.hooks.update    = Hooks.on('updateToken', async (tokenDoc) => { await this.handleUpdateToken(tokenDoc); });
-    this.state.hooks.create    = Hooks.on('createToken', async (tokenDoc) => { await this.handleCreateToken(tokenDoc); });
-    this.state.hooks.delete    = Hooks.on('deleteToken', async (tokenDoc) => { await this.handleDeleteToken(tokenDoc); });
+    this.state.hooks.preUpdate = Hooks.on('preUpdateToken', (tokenDoc, changes) => 
+      this.handlePreUpdateToken(tokenDoc, changes)
+    );
+    this.state.hooks.update = Hooks.on('updateToken', async (tokenDoc) => 
+      await this.handleUpdateToken(tokenDoc)
+    );
+    this.state.hooks.create = Hooks.on('createToken', async (tokenDoc) => 
+      await this.handleCreateToken(tokenDoc)
+    );
+    this.state.hooks.delete = Hooks.on('deleteToken', async (tokenDoc) => 
+      await this.handleDeleteToken(tokenDoc)
+    );
   }
 
-  // 8====== Membership =========D~~~~~
+  // ========== Cell Membership Management ==========
+
+  /**
+   * Add a token to a cell's occupancy set
+   * Creates new cell if it doesn't exist and tracks first occupant
+   * 
+   * @static
+   * @param {string} key - Grid cell key
+   * @param {string} tokenId - Token ID to add
+   */
   static addToCell(key, tokenId) {
-    let set = this.state.cells.get(key);
-    if (!set) { set = new Set(); this.state.cells.set(key, set); this.state.firstInCell.set(key, tokenId); }
-    set.add(tokenId);
+    let tokenSet = this.state.cells.get(key);
+    if (!tokenSet) {
+      tokenSet = new Set();
+      this.state.cells.set(key, tokenSet);
+      this.state.firstInCell.set(key, tokenId);
+    }
+    tokenSet.add(tokenId);
   }
+
+  /**
+   * Remove a token from a cell's occupancy set
+   * Cleans up empty cells and reassigns first-in-cell if necessary
+   * 
+   * @static
+   * @param {string} key - Grid cell key
+   * @param {string} tokenId - Token ID to remove
+   */
   static removeFromCell(key, tokenId) {
-    const set = this.state.cells.get(key);
-    if (!set) return;
-    set.delete(tokenId);
+    const tokenSet = this.state.cells.get(key);
+    if (!tokenSet) return;
+
+    tokenSet.delete(tokenId);
     this.state.arrangedTokens.delete(tokenId);
-    if (set.size === 0) {
+
+    if (tokenSet.size === 0) {
+      // Cell is now empty
       this.state.cells.delete(key);
-      //INCEL kkkkkkkk...
       this.state.firstInCell.delete(key);
     } else if (this.state.firstInCell.get(key) === tokenId) {
-      // Se o "primeiro" saiu, apenas marca novo primeiro; NÃO mexe em posição/rotação de ninguém.
-      this.state.firstInCell.set(key, [...set][0]);
+      // First token left, assign new first (don't move anyone's position/rotation)
+      this.state.firstInCell.set(key, [...tokenSet][0]);
     }
   }
 
-  // ---------- Core ----------
+  // ========== Core Positioning Logic ==========
+
+  /**
+   * Position a newcomer token in an occupied hex
+   * Handles both first entry (center position) and subsequent entries (calculated position)
+   * 
+   * @static
+   * @async
+   * @param {string} key - Grid cell key
+   * @param {string} newcomerTokenId - ID of the token entering the cell
+   * @param {Object} [movement] - Movement data with origin and destination info
+   * @param {Object} [movement.oldCenter] - Center of origin hex
+   * @param {Object} [movement.newCenter] - Center of destination hex
+   */
   static async positionNewcomer(key, newcomerTokenId, movement) {
-    const set = this.state.cells.get(key);
-    if (!set || set.size === 0) return;
+    const tokenSet = this.state.cells.get(key);
+    if (!tokenSet || tokenSet.size === 0) return;
 
     const newcomerToken = canvas.tokens.get(newcomerTokenId);
     if (!newcomerToken) return;
-    const doc = newcomerToken.document;
-
+    
+    const tokenDoc = newcomerToken.document;
     const centerNew = this.centerFromKey(key);
-    const countInCell = set.size; // já inclui o newcomer
+    const countInCell = tokenSet.size; // Already includes the newcomer
 
     if (countInCell === 1) {
-      // 1º no hex → centraliza no centro do HEX (apenas nessa entrada) com scale 1.0
-      const s = 1.0;
-      const { w, h } = this.getPixelSize(doc, s);
-      await this.updateTokenSafe(doc, {
-        x: Math.round(centerNew.x - w/2),
-        y: Math.round(centerNew.y - h/2),
-        scale: s, 'texture.scaleX': s, 'texture.scaleY': s
+      // First token in hex → center in hex with solo scale
+      const scale = this.getSoloScale();
+      const { w, h } = this.getPixelSize(tokenDoc, scale);
+      
+      await this.updateTokenSafe(tokenDoc, {
+        x: Math.round(centerNew.x - w / 2),
+        y: Math.round(centerNew.y - h / 2),
+        scale: scale,
+        'texture.scaleX': scale,
+        'texture.scaleY': scale
       });
       return;
     }
 
-    // Já existia alguém:
-    // 1) Token do meio NÃO mexe posição/rotação; só garante SCALE 0.4
-    const firstId = this.state.firstInCell.get(key);
-    if (firstId && firstId !== newcomerTokenId) {
-      const firstDoc = canvas.tokens.get(firstId)?.document;
-      if (firstDoc) await this.setScaleOnly(firstDoc, 0.4);
+    // Multiple tokens in hex:
+    // 1) First token stays in place but gets pair scale
+    const firstTokenId = this.state.firstInCell.get(key);
+    if (firstTokenId && firstTokenId !== newcomerTokenId) {
+      const firstTokenDoc = canvas.tokens.get(firstTokenId)?.document;
+      if (firstTokenDoc) {
+        await this.setScaleOnly(firstTokenDoc, this.getPairScale());
+      }
     }
 
-    // 2) Newcomer: midpoint entre CENTRO do HEX de origem e CENTRO do HEX de destino,
-    //    + afastamento radial (empurra para longe do centro de destino),
-    //    + offsets X/Y (esquerda/cima).
+    // 2) Newcomer: calculate position using midpoint + offsets + radial push
     if (movement?.oldCenter && movement?.newCenter) {
-      const base = this.midpoint(movement.oldCenter, movement.newCenter);
+      const basePosition = this.midpoint(movement.oldCenter, movement.newCenter);
 
-      // offsets em fração do grid
-      const gx = canvas.grid.size * this.NEWCOMER_OFFSET_GRID_FRAC_X; // ← esquerda se negativo
-      const gy = canvas.grid.size * this.NEWCOMER_OFFSET_GRID_FRAC_Y; // ↑ cima se negativo
+      // Grid-based offsets (negative = left/up)
+      const gridOffsetX = canvas.grid.size * this.NEWCOMER_OFFSET_GRID_FRAC_X;
+      const gridOffsetY = canvas.grid.size * this.NEWCOMER_OFFSET_GRID_FRAC_Y;
 
-      // direção radial (centroDestino -> midpoint), normalizada
-      const dirX = base.x - movement.newCenter.x;
-      const dirY = base.y - movement.newCenter.y;
-      const len  = Math.hypot(dirX, dirY) || 1;
+      // Radial direction (destination center -> midpoint), normalized
+      const directionX = basePosition.x - movement.newCenter.x;
+      const directionY = basePosition.y - movement.newCenter.y;
+      const directionLength = Math.hypot(directionX, directionY) || 1;
 
-      // quanto empurrar em pixels
-      const pushPx = canvas.grid.size * this.NEWCOMER_PUSH_GRID_FRAC;
+      // Push distance in pixels
+      const pushDistance = canvas.grid.size * this.getCenterDistance();
 
-      // centro alvo final
+      // Final target center
       const targetCenter = {
-        x: base.x + (dirX / len) * pushPx + gx,
-        y: base.y + (dirY / len) * pushPx + gy
+        x: basePosition.x + (directionX / directionLength) * pushDistance + gridOffsetX,
+        y: basePosition.y + (directionY / directionLength) * pushDistance + gridOffsetY
       };
 
-      const s = 0.4;
-      const { w, h } = this.getPixelSize(doc, s);
-      await this.updateTokenSafe(doc, {
-        x: Math.round(targetCenter.x - w/2),
-        y: Math.round(targetCenter.y - h/2),
-        ...(Math.abs(this.getApproximateScale(doc) - s) > 0.01 ? { scale: s, 'texture.scaleX': s, 'texture.scaleY': s } : {})
-      });
+      const scale = this.getPairScale();
+      const { w, h } = this.getPixelSize(tokenDoc, scale);
+      
+      const updateData = {
+        x: Math.round(targetCenter.x - w / 2),
+        y: Math.round(targetCenter.y - h / 2)
+      };
+
+      // Only update scale if it's significantly different
+      if (Math.abs(this.getApproximateScale(tokenDoc) - scale) > 0.01) {
+        updateData.scale = scale;
+        updateData['texture.scaleX'] = scale;
+        updateData['texture.scaleY'] = scale;
+      }
+
+      await this.updateTokenSafe(tokenDoc, updateData);
     } else {
-      // criação em hex ocupado (sem origem): não move; só aplica 0.4
-      await this.setScaleOnly(doc, 0.4);
+      // Token created in occupied hex without movement origin: only apply scale
+      await this.setScaleOnly(tokenDoc, this.getPairScale());
     }
   }
 
-  // ---------- Hooks ----------
+  // ========== Hook Handlers ==========
+
+  /**
+   * Handle pre-update token events to track movement
+   * Calculates movement data before the actual update occurs
+   * 
+   * @static
+   * @param {TokenDocument} tokenDoc - Token being updated
+   * @param {Object} changes - Pending changes to the token
+   * @listens Hooks#preUpdateToken
+   */
   static handlePreUpdateToken(tokenDoc, changes) {
     if (this.state.busy.has(tokenDoc.id)) return;
     if (!('x' in changes) && !('y' in changes)) return;
 
-    // hex origem
+    // Find current cell
     let oldKey = null;
-    for (const [key, set] of this.state.cells.entries()) {
-      if (set.has(tokenDoc.id)) { oldKey = key; break; }
+    for (const [key, tokenSet] of this.state.cells.entries()) {
+      if (tokenSet.has(tokenDoc.id)) {
+        oldKey = key;
+        break;
+      }
     }
     if (!oldKey) oldKey = this.keyFromDoc(tokenDoc);
 
-    // hex destino
+    // Calculate destination cell
     const newKey = this.keyFromXY(
       'x' in changes ? changes.x : tokenDoc.x,
       'y' in changes ? changes.y : tokenDoc.y,
       tokenDoc.width ?? 1,
       tokenDoc.height ?? 1
     );
+
     if (oldKey === newKey) return;
 
     const oldCenter = this.centerFromKey(oldKey);
     const newCenter = this.centerFromKey(newKey);
 
-    // membership
+    // Update cell membership
     this.removeFromCell(oldKey, tokenDoc.id);
     this.addToCell(newKey, tokenDoc.id);
 
+    // Store movement data for post-update processing
     this.state.pending.set(tokenDoc.id, { oldKey, newKey, oldCenter, newCenter });
   }
 
+  /**
+   * Handle post-update token events to execute positioning
+   * Processes stored movement data and updates token positions/scales
+   * 
+   * @static
+   * @async
+   * @param {TokenDocument} tokenDoc - Token that was updated
+   * @listens Hooks#updateToken
+   */
   static async handleUpdateToken(tokenDoc) {
     if (this.state.busy.has(tokenDoc.id)) return;
-    const mv = this.state.pending.get(tokenDoc.id);
-    if (!mv) return;
+    
+    const movementData = this.state.pending.get(tokenDoc.id);
+    if (!movementData) return;
     this.state.pending.delete(tokenDoc.id);
 
-    // ORIGEM: se sobrou 1 → cresce pra 1.0 (apenas escala). Se 2+ → não mexe.
-    const oldSet = this.state.cells.get(mv.oldKey);
-    if (oldSet && oldSet.size === 1) {
-      const onlyId = [...oldSet][0];
-      const onlyDoc = canvas.tokens.get(onlyId)?.document;
-      if (onlyDoc) await this.setScaleOnly(onlyDoc, 1.0);
+    // Handle origin cell: if only 1 token remains, scale it to solo scale
+    const oldCellSet = this.state.cells.get(movementData.oldKey);
+    if (oldCellSet && oldCellSet.size === 1) {
+      const remainingTokenId = [...oldCellSet][0];
+      const remainingTokenDoc = canvas.tokens.get(remainingTokenId)?.document;
+      if (remainingTokenDoc) {
+        await this.setScaleOnly(remainingTokenDoc, this.getSoloScale());
+      }
     }
 
-    // DESTINO: processa newcomer
-    await this.positionNewcomer(mv.newKey, tokenDoc.id, mv);
+    // Handle destination cell: position the newcomer
+    await this.positionNewcomer(movementData.newKey, tokenDoc.id, movementData);
   }
 
+  /**
+   * Handle token creation events
+   * Positions newly created tokens based on cell occupancy
+   * 
+   * @static
+   * @async
+   * @param {TokenDocument} tokenDoc - Newly created token
+   * @listens Hooks#createToken
+   */
   static async handleCreateToken(tokenDoc) {
     const key = this.keyFromDoc(tokenDoc);
     this.addToCell(key, tokenDoc.id);
 
-    const set = this.state.cells.get(key);
-    if (set?.size === 1) {
-      // 1º no hex → centraliza e 1.0
+    const tokenSet = this.state.cells.get(key);
+    if (tokenSet?.size === 1) {
+      // First token in hex → center and apply solo scale
       const center = this.centerFromKey(key);
-      const s = 1.0;
-      const { w, h } = this.getPixelSize(tokenDoc, s);
+      const scale = this.getSoloScale();
+      const { w, h } = this.getPixelSize(tokenDoc, scale);
+      
       await this.updateTokenSafe(tokenDoc, {
-        x: Math.round(center.x - w/2),
-        y: Math.round(center.y - h/2),
-        scale: s, 'texture.scaleX': s, 'texture.scaleY': s
+        x: Math.round(center.x - w / 2),
+        y: Math.round(center.y - h / 2),
+        scale: scale,
+        'texture.scaleX': scale,
+        'texture.scaleY': scale
       });
     } else {
-      // hex ocupado, sem origem: não move; só 0.4
-      await this.setScaleOnly(tokenDoc, 0.4);
+      // Created in occupied hex: just apply pair scale, don't move
+      await this.setScaleOnly(tokenDoc, this.getPairScale());
     }
   }
 
+  /**
+   * Handle token deletion events
+   * Cleans up cell membership and rescales remaining tokens if needed
+   * 
+   * @static
+   * @async
+   * @param {TokenDocument} tokenDoc - Deleted token
+   * @listens Hooks#deleteToken
+   */
   static async handleDeleteToken(tokenDoc) {
     let key = null;
-    for (const [cellKey, set] of this.state.cells.entries()) {
-      if (set.has(tokenDoc.id)) { key = cellKey; break; }
+    for (const [cellKey, tokenSet] of this.state.cells.entries()) {
+      if (tokenSet.has(tokenDoc.id)) {
+        key = cellKey;
+        break;
+      }
     }
     if (!key) return;
 
     this.removeFromCell(key, tokenDoc.id);
 
-    // Se sobrou 1 no hex, cresce pra 1.0 (sem mover)
-    const remaining = this.state.cells.get(key);
-    if (remaining && remaining.size === 1) {
-      const onlyId = [...remaining][0];
-      const onlyDoc = canvas.tokens.get(onlyId)?.document;
-      if (onlyDoc) await this.setScaleOnly(onlyDoc, 1.0);
+    // If only 1 token remains in hex, scale it to solo scale (don't move)
+    const remainingSet = this.state.cells.get(key);
+    if (remainingSet && remainingSet.size === 1) {
+      const remainingTokenId = [...remainingSet][0];
+      const remainingTokenDoc = canvas.tokens.get(remainingTokenId)?.document;
+      if (remainingTokenDoc) {
+        await this.setScaleOnly(remainingTokenDoc, this.getSoloScale());
+      }
     }
   }
 
+  /**
+   * Legacy method for Y adjustment updates (deprecated)
+   * Kept for backward compatibility but functionality removed
+   * 
+   * @static
+   * @deprecated
+   * @param {number} _value - Unused parameter
+   */
   static updateYAdjustment(_value) {
     console.log(`${this.MODULE_ID} | updateYAdjustment method is deprecated and should be removed`);
   }
