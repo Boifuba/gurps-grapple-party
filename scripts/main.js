@@ -145,10 +145,10 @@ class TokenResetDialog extends FormApplication {
 
     const tokens = canvas.scene.tokens.contents.filter(tokenDoc => !tokenDoc.hidden);
     
-    if (tokens.length === 0) {
-      ui.notifications.info(game.i18n.localize('GURPS_GRAPPLE_PARTY.notifications.noTokens'));
-      return;
-    }
+    // if (tokens.length === 0) {
+    //   ui.notifications.info(game.i18n.localize('GURPS_GRAPPLE_PARTY.notifications.noTokens'));
+    //   return;
+    // }
 
     try {
       ui.notifications.info(

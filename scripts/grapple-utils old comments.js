@@ -90,7 +90,6 @@ export class GrappleUtils {
     this.cleanup();
     this.bootstrap();
     this.registerHooks();
-    ui.notifications.info("GURPS Grapple Party: Initialized successfully");
   }
 // O Cleanup é necessário para remover as açoes do hook depois de terminar, para ele não ficar com muitos hooks ativos numa mesma sessão. Evita travamentos. 
   static cleanup() {

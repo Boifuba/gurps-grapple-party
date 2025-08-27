@@ -23,17 +23,12 @@
       "path": "lang/en.json"
     }
   ],
-  "url": "https://github.com/your-username/gurps-grapple-party",
-  "manifest": "https://github.com/your-username/gurps-grapple-party/releases/latest/download/module.json",
-  "download": "https://github.com/your-username/gurps-grapple-party/releases/latest/download/gurps-grapple-party.zip",
+  "url": "https://github.com/Boifuba/gurps-grapple-party/",
+  "manifest": "https://github.com/Boifuba/gurps-grapple-party/releases/download/release/module.json",
+  "download": "https://github.com/Boifuba/gurps-grapple-party/releases/download/release/gurps-grapple-party-1.0.0.zip",
   "license": "LICENSE",
   "readme": "README.md",
-  "media": [
-    {
-      "type": "icon",
-      "path": "icon.png"
-    }
-  ],
+
   "keywords": [
     "gurps",
     "combat",
