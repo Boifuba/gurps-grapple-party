@@ -69,6 +69,9 @@ Access settings via **Configure Settings > Module Settings > GURPS Grapple Party
 ### Utilities
 - **Reset All Tokens**: Emergency button to reset all scene tokens to scale 1.0 with confirmation dialog
 
+### Commands 
+`/gp off` Stop module
+`/gp on` turn module on 
 
 
 ### ~~Sausage Party~~ Grappling Chain

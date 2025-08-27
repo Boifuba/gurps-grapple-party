@@ -36,8 +36,33 @@ Hooks.once('init', () => {
 Hooks.once('ready', () => {
   console.log(`${MODULE_ID} | GURPS Grapple Party module ready`);
   
-  // Initialize the grapple system
-  GrappleUtils.initialize();
+  // Initialize the grapple system if enabled
+  if (game.settings.get(MODULE_ID, 'moduleEnabled')) {
+    GrappleUtils.initialize();
+  }
+});
+
+/**
+ * Handle chat commands for module control
+ * @listens Hooks#chatMessage
+ */
+Hooks.on('chatMessage', (log, message, data) => {
+  // Only GMs can use these commands
+  if (!game.user.isGM) return true;
+  
+  const command = message.trim().toLowerCase();
+  
+  if (command === '/gp on') {
+    enableModule();
+    return false; // Prevent the message from appearing in chat
+  }
+  
+  if (command === '/gp off') {
+    disableModule();
+    return false; // Prevent the message from appearing in chat
+  }
+  
+  return true; // Allow other messages to proceed normally
 });
 
 /**
@@ -48,6 +73,13 @@ Hooks.once('ready', () => {
  */
 function registerModuleSettings() {
 
+  // Module enabled/disabled toggle (hidden from menu, controlled via chat)
+  game.settings.register(MODULE_ID, 'moduleEnabled', {
+    scope: 'world',
+    config: false,
+    type: Boolean,
+    default: true
+  });
 
   // Paired token scale setting - now configurable
   game.settings.register(MODULE_ID, 'pairScale', {
@@ -88,6 +120,44 @@ function registerModuleSettings() {
     type: TokenResetDialog,
     restricted: true
   });
+}
+
+/**
+ * Enable the grapple module
+ * Updates settings and initializes the system
+ * 
+ * @async
+ * @function enableModule
+ */
+async function enableModule() {
+  try {
+    await game.settings.set(MODULE_ID, 'moduleEnabled', true);
+    GrappleUtils.initialize();
+    ui.notifications.info(game.i18n.localize('GURPS_GRAPPLE_PARTY.notifications.moduleEnabled') || 'GURPS Grapple Party: Módulo ativado');
+    console.log(`${MODULE_ID} | Module enabled via chat command`);
+  } catch (error) {
+    console.error(`${MODULE_ID} | Error enabling module:`, error);
+    ui.notifications.error('Erro ao ativar o módulo');
+  }
+}
+
+/**
+ * Disable the grapple module
+ * Updates settings and cleans up the system
+ * 
+ * @async
+ * @function disableModule
+ */
+async function disableModule() {
+  try {
+    await game.settings.set(MODULE_ID, 'moduleEnabled', false);
+    GrappleUtils.cleanup();
+    ui.notifications.info(game.i18n.localize('GURPS_GRAPPLE_PARTY.notifications.moduleDisabled') || 'GURPS Grapple Party: Módulo desativado');
+    console.log(`${MODULE_ID} | Module disabled via chat command`);
+  } catch (error) {
+    console.error(`${MODULE_ID} | Error disabling module:`, error);
+    ui.notifications.error('Erro ao desativar o módulo');
+  }
 }
 
 /**

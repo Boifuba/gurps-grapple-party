@@ -1,6 +1,10 @@
 {
   "GURPS_GRAPPLE_PARTY": {
     "settings": {
+      "moduleEnabled": {
+        "name": "Disaable Module",
+        "hint": "Enable or disable the GURPS Grapple Party module. When enabled, tokens will automatically scale and position when occupying the same hex."
+      },
       "yAdjustment": {
         "name": "Vertical Adjustment (Deprecated)",
         "hint": "This setting is deprecated and will be removed in a future version. Vertical adjustment in pixels for token positioning (negative moves up, positive moves down)"
@@ -38,7 +42,9 @@
       "noTokens": "No tokens found in the current scene.",
       "resettingTokens": "Resetting {count} tokens to scale 1.0...",
       "tokensReset": "Successfully reset {count} tokens to normal scale.",
-      "resetError": "Error occurred while resetting tokens. Check the console for details."
+      "resetError": "Error occurred while resetting tokens. Check the console for details.",
+      "moduleEnabled": "GURPS Grapple Party: Module enabled",
+      "moduleDisabled": "GURPS Grapple Party: Module disabled"
     }
   }
 }

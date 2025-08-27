@@ -253,11 +253,13 @@ export class GrappleUtils {
    * Get current solo scale setting from game settings
    * 
    * @static
-   * @returns {number} Scale value for solo tokens
+   * @returns {number} Scale value for solo tokens (default 1.0)
    */
   static getSoloScale() {
-    return game.settings.get(this.MODULE_ID, 'soloScale') ?? 1.0;
+    return 1.0;
   }
+
+ 
 
   /**
    * Get current center distance setting from game settings
@@ -282,7 +284,6 @@ export class GrappleUtils {
     this.cleanup();
     this.bootstrap();
     this.registerHooks();
-    ui.notifications.info("GURPS Grapple Party: Initialized successfully");
   }
 
   /**
@@ -539,6 +540,9 @@ export class GrappleUtils {
    * @listens Hooks#updateToken
    */
   static async handleUpdateToken(tokenDoc) {
+    // Check if module is enabled
+    if (!game.settings.get(this.MODULE_ID, 'moduleEnabled')) return;
+    
     if (this.state.busy.has(tokenDoc.id)) return;
     
     const movementData = this.state.pending.get(tokenDoc.id);
@@ -569,6 +573,9 @@ export class GrappleUtils {
    * @listens Hooks#createToken
    */
   static async handleCreateToken(tokenDoc) {
+    // Check if module is enabled
+    if (!game.settings.get(this.MODULE_ID, 'moduleEnabled')) return;
+    
     const key = this.keyFromDoc(tokenDoc);
     this.addToCell(key, tokenDoc.id);
 
@@ -602,6 +609,9 @@ export class GrappleUtils {
    * @listens Hooks#deleteToken
    */
   static async handleDeleteToken(tokenDoc) {
+    // Check if module is enabled
+    if (!game.settings.get(this.MODULE_ID, 'moduleEnabled')) return;
+    
     let key = null;
     for (const [cellKey, tokenSet] of this.state.cells.entries()) {
       if (tokenSet.has(tokenDoc.id)) {
