@@ -1,0 +1,18 @@
+{
+  "gurps-grapple-party": {
+    "settings": {
+      "yAdjustment": {
+        "name": "Vertical Adjustment",
+        "hint": "Vertical adjustment in pixels for token positioning (negative moves up, positive moves down)"
+      },
+      "soloScale": {
+        "name": "Solo Token Scale",
+        "hint": "Scale for tokens when alone in a hex"
+      },
+      "pairScale": {
+        "name": "Pair Token Scale", 
+        "hint": "Scale for tokens when two are in the same hex"
+      }
+    }
+  }
+}

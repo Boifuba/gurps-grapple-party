@@ -1,0 +1,32 @@
+{
+  "id": "gurps-grapple-party",
+  "title": "GURPS Grapple Party",
+  "description": "Automatic Scaling and Positioning of Grappled Tokens on Hex Grids for GURPS Combat",
+  "version": "1.0.0",
+  "compatibility": {
+    "minimum": "13",
+    "verified": "13"
+  },
+  "authors": [
+    {
+      "name": "Boifubá"
+    }
+  ],
+  "esmodules": [
+    "scripts/main.js"
+  ],
+  "languages": [
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/en.json"
+    }
+  ],
+  "url": "",
+  "manifest": "",
+  "download": "",
+  "license": "MIT",
+  "readme": "README.md",
+  "bugs": "",
+  "changelog": ""
+}
