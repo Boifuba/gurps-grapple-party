@@ -3,10 +3,9 @@
  * Main module initialization and hook management
  * 
  * Automatically scales and positions tokens when they occupy the same hex in GURPS combat.
- * Only affects tokens with scale 1.0 to preserve manually scaled tokens.
  * 
  * @author GURPS Community
- * @version 1.0.0
+ * @version 1.0.2 (Corrected & Complete)
  * @since Foundry VTT v13+
  */
 
@@ -111,6 +110,21 @@ function registerModuleSettings() {
     }
   });
 
+  // Maximum scale threshold - tokens larger than this are ignored
+  game.settings.register(MODULE_ID, 'maxIgnoredScale', {
+    name: 'GURPS_GRAPPLE_PARTY.settings.maxIgnoredScale.name',
+    hint: 'GURPS_GRAPPLE_PARTY.settings.maxIgnoredScale.hint',
+    scope: 'world',
+    config: true,
+    type: Number,
+    default: 1.5,
+    range: {
+      min: 1.0,
+      max: 5.0,
+      step: 0.1
+    }
+  });
+
   // Token reset utility setting - shows a button to reset all tokens
   game.settings.registerMenu(MODULE_ID, 'resetTokensMenu', {
     name: 'GURPS_GRAPPLE_PARTY.settings.resetTokensMenu.name',
@@ -162,7 +176,7 @@ async function disableModule() {
 
 /**
  * Dialog class for token reset functionality
- * Provides a confirmation dialog before resetting all tokens to scale 1.0
+ * Provides a confirmation dialog before resetting all tokens to their original scale.
  * 
  * @extends {FormApplication}
  */
@@ -201,8 +215,8 @@ class TokenResetDialog extends FormApplication {
   }
 
   /**
-   * Reset all tokens in the current scene to scale 1.0
-   * Shows progress notification and handles errors gracefully
+   * Reset all tokens in the current scene to their original scale.
+   * Shows progress notification and handles errors gracefully.
    * 
    * @async
    * @function resetAllTokens
@@ -215,10 +229,10 @@ class TokenResetDialog extends FormApplication {
 
     const tokens = canvas.scene.tokens.contents.filter(tokenDoc => !tokenDoc.hidden);
     
-    // if (tokens.length === 0) {
-    //   ui.notifications.info(game.i18n.localize('GURPS_GRAPPLE_PARTY.notifications.noTokens'));
-    //   return;
-    // }
+    if (tokens.length === 0) {
+      ui.notifications.info(game.i18n.localize('GURPS_GRAPPLE_PARTY.notifications.noTokens'));
+      return;
+    }
 
     try {
       ui.notifications.info(
@@ -227,18 +241,29 @@ class TokenResetDialog extends FormApplication {
         })
       );
 
-      // Reset all tokens to scale 1.0
-      const updates = tokens.map(tokenDoc => ({
-        _id: tokenDoc.id,
-        scale: 1.0,
-        'texture.scaleX': 1.0,
-        'texture.scaleY': 1.0
-      }));
+      // ======================================================================
+      // ======================= INÍCIO DA CORREÇÃO ===========================
+      // ======================================================================
+      // Reset all tokens to their original scale values.
+      // Uses getSoloScale to ensure there's always a valid fallback (the token's current scale)
+      // if the original scale was never stored. This prevents resetting to 1.
+      const updates = tokens.map(tokenDoc => {
+        const resetScale = GrappleUtils.getSoloScale(tokenDoc);
+        return {
+          _id: tokenDoc.id,
+          scale: resetScale,
+          'texture.scaleX': resetScale,
+          'texture.scaleY': resetScale
+        };
+      });
+      // ======================================================================
+      // ======================== FIM DA CORREÇÃO =============================
+      // ======================================================================
 
       await canvas.scene.updateEmbeddedDocuments('Token', updates);
 
-      // Clear internal tracking state
-      GrappleUtils.state.arrangedTokens.clear();
+      // Clear internal tracking state and re-bootstrap to reflect the reset state
+      GrappleUtils.initialize();
       
       ui.notifications.info(
         game.i18n.format('GURPS_GRAPPLE_PARTY.notifications.tokensReset', {

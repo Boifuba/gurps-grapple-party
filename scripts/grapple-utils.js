@@ -11,7 +11,7 @@
  * - Module is singleton and manages everything globally
  * 
  * @author GURPS Community
- * @version 1.0.0
+ * @version 1.0.1 (Corrected)
  * @since Foundry VTT v13+
  */
 
@@ -64,6 +64,7 @@ export class GrappleUtils {
    * @property {Set<string>} busy - Token IDs currently being updated
    * @property {Map<string, string>} firstInCell - Maps cell keys to first token ID in cell
    * @property {Set<string>} arrangedTokens - Token IDs that have been arranged by the module
+   * @property {Map<string, number>} originalScales - Maps token IDs to their original scale values
    */
   static state = {
     hooks: {},
@@ -71,7 +72,8 @@ export class GrappleUtils {
     pending: new Map(),
     busy: new Set(),
     firstInCell: new Map(),
-    arrangedTokens: new Set()
+    arrangedTokens: new Set(),
+    originalScales: new Map()
   };
 
   // ========== Helper Methods ==========
@@ -230,6 +232,8 @@ export class GrappleUtils {
    * @param {number} scale - New scale value
    */
   static async setScaleOnly(tokenDoc, scale) {
+    // Adicionado um check para garantir que a escala é um número válido
+    if (typeof scale !== 'number' || isNaN(scale)) return;
     if (Math.abs(this.getApproximateScale(tokenDoc) - scale) <= 0.01) return;
     
     await this.updateTokenSafe(tokenDoc, {
@@ -237,6 +241,33 @@ export class GrappleUtils {
       'texture.scaleX': scale,
       'texture.scaleY': scale
     });
+  }
+
+  /**
+   * Check if a token should be ignored based on its current scale
+   * Tokens larger than the configured threshold are ignored
+   * 
+   * @static
+   * @param {TokenDocument} tokenDoc - The token document to check
+   * @returns {boolean} True if token should be ignored, false otherwise
+   */
+  static shouldIgnoreToken(tokenDoc) {
+    const maxIgnoredScale = game.settings.get(this.MODULE_ID, 'maxIgnoredScale') ?? 1.5;
+    const currentScale = this.getApproximateScale(tokenDoc);
+    return currentScale > maxIgnoredScale;
+  }
+
+  /**
+   * Store the original scale of a token if not already stored
+   * 
+   * @static
+   * @param {TokenDocument} tokenDoc - The token document
+   */
+  static storeOriginalScale(tokenDoc) {
+    if (!this.state.originalScales.has(tokenDoc.id)) {
+      const originalScale = this.getApproximateScale(tokenDoc);
+      this.state.originalScales.set(tokenDoc.id, originalScale);
+    }
   }
 
   /**
@@ -249,17 +280,33 @@ export class GrappleUtils {
     return game.settings.get(this.MODULE_ID, 'pairScale') ?? 0.4;
   }
 
+  // ======================================================================
+  // ======================= INÍCIO DA CORREÇÃO ===========================
+  // ======================================================================
   /**
-   * Get current solo scale setting from game settings
+   * Get current solo scale setting from game settings.
+   * Now returns the original scale for the specific token.
+   * If the original scale is not found, it falls back to the token's current scale.
    * 
    * @static
-   * @returns {number} Scale value for solo tokens (default 1.0)
+   * @param {TokenDocument} tokenDoc - The token document
+   * @returns {number} Original scale value for the token, or its current scale as a fallback.
    */
-  static getSoloScale() {
-    return 1.0;
+  static getSoloScale(tokenDoc) {
+    const originalScale = this.state.originalScales.get(tokenDoc.id);
+    
+    // Se a escala original foi encontrada e é um número válido, retorne-a.
+    if (typeof originalScale === 'number' && !isNaN(originalScale)) {
+      return originalScale;
+    }
+    
+    // Se não, use a escala ATUAL do token como fallback seguro.
+    // Isso garante que nunca retornaremos 'undefined' e evita a reversão para 1.
+    return this.getApproximateScale(tokenDoc);
   }
-
- 
+  // ======================================================================
+  // ======================== FIM DA CORREÇÃO =============================
+  // ======================================================================
 
   /**
    * Get current center distance setting from game settings
@@ -304,6 +351,7 @@ export class GrappleUtils {
     this.state.busy.clear();
     this.state.firstInCell.clear();
     this.state.arrangedTokens.clear();
+    this.state.originalScales.clear();
     window[this.NAMESPACE] = this.state;
   }
 
@@ -318,6 +366,12 @@ export class GrappleUtils {
     
     const tokens = canvas.scene.tokens.contents.filter(tokenDoc => !tokenDoc.hidden);
     for (const tokenDoc of tokens) {
+      // Skip tokens that should be ignored
+      if (this.shouldIgnoreToken(tokenDoc)) continue;
+      
+      // Store original scale for future restoration
+      this.storeOriginalScale(tokenDoc);
+      
       const key = this.keyFromDoc(tokenDoc);
       this.addToCell(key, tokenDoc.id);
       // Bootstrap NEVER moves, centers, or changes scale!
@@ -417,7 +471,7 @@ export class GrappleUtils {
 
     if (countInCell === 1) {
       // First token in hex → center in hex with solo scale
-      const scale = this.getSoloScale();
+      const scale = this.getSoloScale(tokenDoc);
       const { w, h } = this.getPixelSize(tokenDoc, scale);
       
       await this.updateTokenSafe(tokenDoc, {
@@ -496,6 +550,9 @@ export class GrappleUtils {
    * @listens Hooks#preUpdateToken
    */
   static handlePreUpdateToken(tokenDoc, changes) {
+    // Skip tokens that should be ignored
+    if (this.shouldIgnoreToken(tokenDoc)) return;
+    
     if (this.state.busy.has(tokenDoc.id)) return;
     if (!('x' in changes) && !('y' in changes)) return;
 
@@ -543,6 +600,9 @@ export class GrappleUtils {
     // Check if module is enabled
     if (!game.settings.get(this.MODULE_ID, 'moduleEnabled')) return;
     
+    // Skip tokens that should be ignored
+    if (this.shouldIgnoreToken(tokenDoc)) return;
+    
     if (this.state.busy.has(tokenDoc.id)) return;
     
     const movementData = this.state.pending.get(tokenDoc.id);
@@ -555,7 +615,7 @@ export class GrappleUtils {
       const remainingTokenId = [...oldCellSet][0];
       const remainingTokenDoc = canvas.tokens.get(remainingTokenId)?.document;
       if (remainingTokenDoc) {
-        await this.setScaleOnly(remainingTokenDoc, this.getSoloScale());
+        await this.setScaleOnly(remainingTokenDoc, this.getSoloScale(remainingTokenDoc));
       }
     }
 
@@ -576,6 +636,12 @@ export class GrappleUtils {
     // Check if module is enabled
     if (!game.settings.get(this.MODULE_ID, 'moduleEnabled')) return;
     
+    // Skip tokens that should be ignored
+    if (this.shouldIgnoreToken(tokenDoc)) return;
+    
+    // Store original scale for future restoration
+    this.storeOriginalScale(tokenDoc);
+    
     const key = this.keyFromDoc(tokenDoc);
     this.addToCell(key, tokenDoc.id);
 
@@ -583,7 +649,7 @@ export class GrappleUtils {
     if (tokenSet?.size === 1) {
       // First token in hex → center and apply solo scale
       const center = this.centerFromKey(key);
-      const scale = this.getSoloScale();
+      const scale = this.getSoloScale(tokenDoc);
       const { w, h } = this.getPixelSize(tokenDoc, scale);
       
       await this.updateTokenSafe(tokenDoc, {
@@ -612,6 +678,9 @@ export class GrappleUtils {
     // Check if module is enabled
     if (!game.settings.get(this.MODULE_ID, 'moduleEnabled')) return;
     
+    // Skip tokens that should be ignored
+    if (this.shouldIgnoreToken(tokenDoc)) return;
+    
     let key = null;
     for (const [cellKey, tokenSet] of this.state.cells.entries()) {
       if (tokenSet.has(tokenDoc.id)) {
@@ -622,6 +691,9 @@ export class GrappleUtils {
     if (!key) return;
 
     this.removeFromCell(key, tokenDoc.id);
+    
+    // Clean up stored original scale
+    this.state.originalScales.delete(tokenDoc.id);
 
     // If only 1 token remains in hex, scale it to solo scale (don't move)
     const remainingSet = this.state.cells.get(key);
@@ -629,7 +701,7 @@ export class GrappleUtils {
       const remainingTokenId = [...remainingSet][0];
       const remainingTokenDoc = canvas.tokens.get(remainingTokenId)?.document;
       if (remainingTokenDoc) {
-        await this.setScaleOnly(remainingTokenDoc, this.getSoloScale());
+        await this.setScaleOnly(remainingTokenDoc, this.getSoloScale(remainingTokenDoc));
       }
     }
   }
