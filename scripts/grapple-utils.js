@@ -350,8 +350,6 @@ export class GrappleUtils {
     this.state.pending.clear();
     this.state.busy.clear();
     this.state.firstInCell.clear();
-    this.state.arrangedTokens.clear();
-    this.state.originalScales.clear();
     window[this.NAMESPACE] = this.state;
   }
 
