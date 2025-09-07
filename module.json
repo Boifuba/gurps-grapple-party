@@ -2,7 +2,7 @@
   "id": "gurps-grapple-party",
   "title": "GURPS Grapple Party",
   "description": "Automatic token scaling and intelligent positioning for hexagonal grids during GURPS combat. Features smart positioning algorithms and comprehensive configuration options.",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "compatibility": {
     "minimum": "13",
     "verified": "13"
@@ -25,7 +25,7 @@
   ],
   "url": "https://github.com/Boifuba/gurps-grapple-party/",
   "manifest": "https://raw.githubusercontent.com/Boifuba/gurps-grapple-party/refs/heads/main/module.json",
-  "download": "https://github.com/Boifuba/gurps-grapple-party/releases/download/1.0.2/gurps-grapple-party.zip",
+  "download": "https://github.com/Boifuba/gurps-grapple-party/releases/download/1.0.3/gurps-grapple-party.zip",
   "license": "LICENSE",
   "readme": "README.md",
 

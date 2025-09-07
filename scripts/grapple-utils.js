@@ -252,6 +252,10 @@ export class GrappleUtils {
    * @returns {boolean} True if token should be ignored, false otherwise
    */
   static shouldIgnoreToken(tokenDoc) {
+    // Ignore hidden/invisible tokens
+    if (tokenDoc.hidden) return true;
+    
+    // Ignore tokens larger than the configured threshold
     const maxIgnoredScale = game.settings.get(this.MODULE_ID, 'maxIgnoredScale') ?? 1.5;
     const currentScale = this.getApproximateScale(tokenDoc);
     return currentScale > maxIgnoredScale;
@@ -350,8 +354,6 @@ export class GrappleUtils {
     this.state.pending.clear();
     this.state.busy.clear();
     this.state.firstInCell.clear();
-    this.state.arrangedTokens.clear();
-    this.state.originalScales.clear();
     window[this.NAMESPACE] = this.state;
   }
 
@@ -364,7 +366,7 @@ export class GrappleUtils {
   static bootstrap() {
     if (!canvas.scene) return;
     
-    const tokens = canvas.scene.tokens.contents.filter(tokenDoc => !tokenDoc.hidden);
+    const tokens = canvas.scene.tokens.contents;
     for (const tokenDoc of tokens) {
       // Skip tokens that should be ignored
       if (this.shouldIgnoreToken(tokenDoc)) continue;
@@ -410,6 +412,10 @@ export class GrappleUtils {
    * @param {string} tokenId - Token ID to add
    */
   static addToCell(key, tokenId) {
+    // Get the token document to check if it should be ignored
+    const tokenDoc = canvas.scene.tokens.get(tokenId);
+    if (tokenDoc && this.shouldIgnoreToken(tokenDoc)) return;
+    
     let tokenSet = this.state.cells.get(key);
     if (!tokenSet) {
       tokenSet = new Set();
@@ -439,8 +445,14 @@ export class GrappleUtils {
       this.state.cells.delete(key);
       this.state.firstInCell.delete(key);
     } else if (this.state.firstInCell.get(key) === tokenId) {
-      // First token left, assign new first (don't move anyone's position/rotation)
-      this.state.firstInCell.set(key, [...tokenSet][0]);
+      // First token left, assign new first from visible tokens only
+      const visibleTokens = [...tokenSet].filter(id => {
+        const tokenDoc = canvas.scene.tokens.get(id);
+        return tokenDoc && !this.shouldIgnoreToken(tokenDoc);
+      });
+      if (visibleTokens.length > 0) {
+        this.state.firstInCell.set(key, visibleTokens[0]);
+      }
     }
   }
 
@@ -462,12 +474,18 @@ export class GrappleUtils {
     const tokenSet = this.state.cells.get(key);
     if (!tokenSet || tokenSet.size === 0) return;
 
+    // Count only visible tokens in the cell
+    const visibleTokensInCell = [...tokenSet].filter(id => {
+      const tokenDoc = canvas.scene.tokens.get(id);
+      return tokenDoc && !this.shouldIgnoreToken(tokenDoc);
+    });
+    
     const newcomerToken = canvas.tokens.get(newcomerTokenId);
     if (!newcomerToken) return;
     
     const tokenDoc = newcomerToken.document;
     const centerNew = this.centerFromKey(key);
-    const countInCell = tokenSet.size; // Already includes the newcomer
+    const countInCell = visibleTokensInCell.length; // Only count visible tokens
 
     if (countInCell === 1) {
       // First token in hex → center in hex with solo scale
@@ -489,7 +507,7 @@ export class GrappleUtils {
     const firstTokenId = this.state.firstInCell.get(key);
     if (firstTokenId && firstTokenId !== newcomerTokenId) {
       const firstTokenDoc = canvas.tokens.get(firstTokenId)?.document;
-      if (firstTokenDoc) {
+      if (firstTokenDoc && !this.shouldIgnoreToken(firstTokenDoc)) {
         await this.setScaleOnly(firstTokenDoc, this.getPairScale());
       }
     }
@@ -697,11 +715,18 @@ export class GrappleUtils {
 
     // If only 1 token remains in hex, scale it to solo scale (don't move)
     const remainingSet = this.state.cells.get(key);
-    if (remainingSet && remainingSet.size === 1) {
-      const remainingTokenId = [...remainingSet][0];
+    if (remainingSet) {
+      const visibleTokensRemaining = [...remainingSet].filter(id => {
+        const tokenDoc = canvas.scene.tokens.get(id);
+        return tokenDoc && !this.shouldIgnoreToken(tokenDoc);
+      });
+      
+      if (visibleTokensRemaining.length === 1) {
+        const remainingTokenId = visibleTokensRemaining[0];
       const remainingTokenDoc = canvas.tokens.get(remainingTokenId)?.document;
       if (remainingTokenDoc) {
         await this.setScaleOnly(remainingTokenDoc, this.getSoloScale(remainingTokenDoc));
+      }
       }
     }
   }

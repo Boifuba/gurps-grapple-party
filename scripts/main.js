@@ -262,9 +262,6 @@ class TokenResetDialog extends FormApplication {
 
       await canvas.scene.updateEmbeddedDocuments('Token', updates);
 
-      // Clear internal tracking state and re-bootstrap to reflect the reset state
-      GrappleUtils.initialize();
-      
       ui.notifications.info(
         game.i18n.format('GURPS_GRAPPLE_PARTY.notifications.tokensReset', {
           count: tokens.length
@@ -273,7 +270,10 @@ class TokenResetDialog extends FormApplication {
 
     } catch (error) {
       console.error(`${MODULE_ID} | Error resetting tokens:`, error);
-      ui.notifications.error(game.i18n.localize('GURPS_GRAPPLE_PARTY.notifications.resetError'));
+      ui.notifications.error(
+        game.i18n.localize('GURPS_GRAPPLE_PARTY.notifications.resetError') || 
+        'Erro ao redefinir tokens'
+      );
     }
   }
 
