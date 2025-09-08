@@ -25,17 +25,7 @@
   ],
   "url": "https://github.com/Boifuba/gurps-grapple-party/",
   "manifest": "https://raw.githubusercontent.com/Boifuba/gurps-grapple-party/refs/heads/main/module.json",
-  "download": "https://github.com/Boifuba/gurps-grapple-party/releases/download/1.0.3/gurps-grapple-party.zip",
-  "license": "LICENSE",
-  "readme": "README.md",
+  "download": "https://github.com/Boifuba/gurps-grapple-party/releases/download/1.0.3/gurps-grapple-party.zip"
+  
 
-  "keywords": [
-    "gurps",
-    "combat",
-    "tokens",
-    "hexagonal",
-    "grapple",
-    "positioning",
-    "scaling"
-  ]
 }

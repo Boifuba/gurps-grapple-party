@@ -248,7 +248,7 @@ export class GrappleUtils {
    * Tokens larger than the configured threshold are ignored
    * 
    * @static
-   * @param {TokenDocument} tokenDoc - The token document to check
+   * @param {TokenDocument|Object} tokenDoc - The token document or token data object to check
    * @returns {boolean} True if token should be ignored, false otherwise
    */
   static shouldIgnoreToken(tokenDoc) {
@@ -257,7 +257,21 @@ export class GrappleUtils {
     
     // Ignore tokens larger than the configured threshold
     const maxIgnoredScale = game.settings.get(this.MODULE_ID, 'maxIgnoredScale') ?? 1.5;
-    const currentScale = this.getApproximateScale(tokenDoc);
+    
+    // Handle both TokenDocument and plain objects (for temporary checks)
+    let currentScale;
+    if (tokenDoc.toObject) {
+      // This is a TokenDocument
+      currentScale = this.getApproximateScale(tokenDoc);
+    } else {
+      // This is a plain object (temporary token data)
+      const values = [];
+      if (typeof tokenDoc.scale === 'number') values.push(tokenDoc.scale);
+      if (typeof tokenDoc.texture?.scaleX === 'number') values.push(tokenDoc.texture.scaleX);
+      if (typeof tokenDoc.texture?.scaleY === 'number') values.push(tokenDoc.texture.scaleY);
+      currentScale = values.length ? values.reduce((a, b) => a + b, 0) / values.length : 1;
+    }
+    
     return currentScale > maxIgnoredScale;
   }
 
@@ -568,8 +582,71 @@ export class GrappleUtils {
    * @listens Hooks#preUpdateToken
    */
   static handlePreUpdateToken(tokenDoc, changes) {
-    // Skip tokens that should be ignored
-    if (this.shouldIgnoreToken(tokenDoc)) return;
+    // Determine ignore status before and after the update
+    const wasIgnored = this.shouldIgnoreToken(tokenDoc);
+    
+    // Create a temporary token doc with the changes applied to check future ignore status
+    const tempTokenDoc = foundry.utils.mergeObject(tokenDoc.toObject(), changes, { inplace: false });
+    const willBeIgnored = this.shouldIgnoreToken(tempTokenDoc);
+    
+    // Handle visibility state changes
+    if (!wasIgnored && willBeIgnored) {
+      // Token is becoming ignored - remove it from cell tracking
+      let currentKey = null;
+      for (const [key, tokenSet] of this.state.cells.entries()) {
+        if (tokenSet.has(tokenDoc.id)) {
+          currentKey = key;
+          break;
+        }
+      }
+      if (currentKey) {
+        this.removeFromCell(currentKey, tokenDoc.id);
+        
+        // If only 1 visible token remains in the cell, scale it to solo scale
+        const remainingSet = this.state.cells.get(currentKey);
+        if (remainingSet) {
+          const visibleTokensRemaining = [...remainingSet].filter(id => {
+            const tokenDoc = canvas.scene.tokens.get(id);
+            return tokenDoc && !this.shouldIgnoreToken(tokenDoc);
+          });
+          
+          if (visibleTokensRemaining.length === 1) {
+            const remainingTokenId = visibleTokensRemaining[0];
+            const remainingTokenDoc = canvas.tokens.get(remainingTokenId)?.document;
+            if (remainingTokenDoc) {
+              // Schedule the scale update for after this update completes
+              setTimeout(async () => {
+                await this.setScaleOnly(remainingTokenDoc, this.getSoloScale(remainingTokenDoc));
+              }, 10);
+            }
+          }
+        }
+      }
+      return; // Don't process movement for tokens becoming ignored
+    }
+    
+    if (wasIgnored && !willBeIgnored) {
+      // Token is becoming visible - add it to cell tracking
+      const key = this.keyFromXY(
+        'x' in changes ? changes.x : tokenDoc.x,
+        'y' in changes ? changes.y : tokenDoc.y,
+        tokenDoc.width ?? 1,
+        tokenDoc.height ?? 1
+      );
+      this.addToCell(key, tokenDoc.id);
+      
+      // Store original scale for future restoration
+      this.storeOriginalScale(tokenDoc);
+      
+      // Schedule positioning for after this update completes
+      setTimeout(async () => {
+        await this.positionNewcomer(key, tokenDoc.id);
+      }, 10);
+      return; // Don't process as movement
+    }
+    
+    // If token will still be ignored after update, skip movement processing
+    if (willBeIgnored) return;
     
     if (this.state.busy.has(tokenDoc.id)) return;
     if (!('x' in changes) && !('y' in changes)) return;
@@ -630,10 +707,18 @@ export class GrappleUtils {
     // Handle origin cell: if only 1 token remains, scale it to solo scale
     const oldCellSet = this.state.cells.get(movementData.oldKey);
     if (oldCellSet && oldCellSet.size === 1) {
-      const remainingTokenId = [...oldCellSet][0];
+      // Count only visible, non-ignored tokens in the old cell
+      const visibleTokensInOldCell = [...oldCellSet].filter(id => {
+        const tokenDoc = canvas.scene.tokens.get(id);
+        return tokenDoc && !this.shouldIgnoreToken(tokenDoc);
+      });
+      
+      if (visibleTokensInOldCell.length === 1) {
+        const remainingTokenId = visibleTokensInOldCell[0];
       const remainingTokenDoc = canvas.tokens.get(remainingTokenId)?.document;
       if (remainingTokenDoc) {
         await this.setScaleOnly(remainingTokenDoc, this.getSoloScale(remainingTokenDoc));
+      }
       }
     }
 
