@@ -336,6 +336,23 @@ export class GrappleUtils {
     return game.settings.get(this.MODULE_ID, 'centerDistance') ?? -0.10;
   }
 
+  /**
+   * Check if a token is currently managed by the module
+   * A token is considered managed if it's present in any cell tracking
+   * 
+   * @static
+   * @param {string} tokenId - The token ID to check
+   * @returns {boolean} True if token is managed by the module, false otherwise
+   */
+  static isTokenManaged(tokenId) {
+    for (const [key, tokenSet] of this.state.cells.entries()) {
+      if (tokenSet.has(tokenId)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   // ========== Lifecycle Management ==========
 
   /**
@@ -401,8 +418,8 @@ export class GrappleUtils {
    * @static
    */
   static registerHooks() {
-    this.state.hooks.preUpdate = Hooks.on('preUpdateToken', (tokenDoc, changes) => 
-      this.handlePreUpdateToken(tokenDoc, changes)
+    this.state.hooks.preUpdate = Hooks.on('preUpdateToken', (tokenDoc, changes, options) => 
+      this.handlePreUpdateToken(tokenDoc, changes, options)
     );
     this.state.hooks.update = Hooks.on('updateToken', async (tokenDoc) => 
       await this.handleUpdateToken(tokenDoc)
@@ -579,9 +596,10 @@ export class GrappleUtils {
    * @static
    * @param {TokenDocument} tokenDoc - Token being updated
    * @param {Object} changes - Pending changes to the token
+   * @param {Object} options - Update options from Foundry
    * @listens Hooks#preUpdateToken
    */
-  static handlePreUpdateToken(tokenDoc, changes) {
+  static handlePreUpdateToken(tokenDoc, changes, options) {
     // Determine ignore status before and after the update
     const wasIgnored = this.shouldIgnoreToken(tokenDoc);
     
@@ -670,6 +688,13 @@ export class GrappleUtils {
     );
 
     if (oldKey === newKey) return;
+
+    // Prevent rotation when leaving an occupied hex
+    const oldCellSet = this.state.cells.get(oldKey);
+    if (oldCellSet && oldCellSet.size > 1 && changes.rotation !== undefined) {
+      changes.rotation = tokenDoc.rotation;
+      if (options) options.animate = false;
+    }
 
     const oldCenter = this.centerFromKey(oldKey);
     const newCenter = this.centerFromKey(newKey);

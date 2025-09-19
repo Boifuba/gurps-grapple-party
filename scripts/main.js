@@ -24,7 +24,7 @@ const MODULE_ID = 'gurps-grapple-party';
 Hooks.once('init', () => {
   console.log(`${MODULE_ID} | Initializing GURPS Grapple Party module`);
   
-  // Register all module settings
+  
   registerModuleSettings();
 });
 
@@ -46,22 +46,22 @@ Hooks.once('ready', () => {
  * @listens Hooks#chatMessage
  */
 Hooks.on('chatMessage', (log, message, data) => {
-  // Only GMs can use these commands
+  
   if (!game.user.isGM) return true;
   
   const command = message.trim().toLowerCase();
   
   if (command === '/gp on') {
     enableModule();
-    return false; // Prevent the message from appearing in chat
+    return false; 
   }
   
   if (command === '/gp off') {
     disableModule();
-    return false; // Prevent the message from appearing in chat
+    return false; 
   }
   
-  return true; // Allow other messages to proceed normally
+  return true; 
 });
 
 /**
@@ -123,6 +123,16 @@ function registerModuleSettings() {
       max: 5.0,
       step: 0.1
     }
+  });
+
+  // Button visibility setting - controls if the scene control button is shown
+  game.settings.register(MODULE_ID, 'showSceneButton', {
+    name: 'GURPS_GRAPPLE_PARTY.settings.showSceneButton.name',
+    hint: 'GURPS_GRAPPLE_PARTY.settings.showSceneButton.hint',
+    scope: 'world',
+    config: true,
+    type: Boolean,
+    default: true
   });
 
   // Token reset utility setting - shows a button to reset all tokens
@@ -296,3 +306,27 @@ class TokenResetDialog extends FormApplication {
     });
   }
 }
+
+    // Add scene control button
+    Hooks.on("getSceneControlButtons", (controls) => {
+      const tokenControls = controls.tokens;
+
+      if (tokenControls && tokenControls.tools) {
+        tokenControls.tools["gurps-grapple-party"] = {
+          name: "gurps-grapple-party",
+          title: "GURPS Grapple Party",
+          icon: "fas fa-hands",
+          button: true,
+          onClick: () => {
+            const isEnabled = game.settings.get(MODULE_ID, 'moduleEnabled');
+            if (isEnabled) {
+              disableModule();
+            } else {
+              enableModule();
+            }
+          },
+          visible: game.settings.get(MODULE_ID, 'showSceneButton')
+        };
+      }
+    });
+  

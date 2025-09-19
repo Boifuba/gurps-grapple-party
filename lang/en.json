@@ -1,6 +1,10 @@
 {
   "GURPS_GRAPPLE_PARTY": {
     "settings": {
+       "showSceneButton": {
+        "name": "Show Button",
+        "hint": "Show Button on action bar"
+      },
       "moduleEnabled": {
         "name": "Enable Module",
         "hint": "Enable or disable the GURPS Grapple Party module. When enabled, tokens will automatically scale and position when occupying the same hex."
