@@ -1,3 +1,5 @@
+[![Donate](https://img.shields.io/badge/Donate-Sponsor%20on%20GitHub-black?logo=github)](https://github.com/sponsors/Boifuba)
+
 # GURPS Grapple Party 🎵
 
 A sophisticated Foundry VTT module for automatic token scaling and intelligent positioning during GURPS combat encounters. Designed specifically for hexagonal grids, this module eliminates the manual hassle of token management when multiple combatants occupy the same space.
@@ -123,11 +125,15 @@ GrappleUtils.state.cells.clear();
 GrappleUtils.state.arrangedTokens.clear();
 ```
 
+## Looking more modules for GURPS?
 
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
+- [Instant Bazaar](https://github.com/Boifuba/gurps-instant-bazaar)
+- [Instant Defaults](https://github.com/Boifuba/gurps-instant-defaults)
+- [Instant Counter](https://github.com/Boifuba/gurps-counter)
+- [Mookinator](https://github.com/Boifuba/mookinator)
+- [Size Matters](https://github.com/Boifuba/size-matters)
+- [Grapple Party](https://github.com/Boifuba/gurps-grapple-party)
+- [Roll Stats](https://github.com/Boifuba/gurps-rolls-stats)
 
 ### Support the Project
 
