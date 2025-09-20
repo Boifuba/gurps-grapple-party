@@ -307,26 +307,25 @@ class TokenResetDialog extends FormApplication {
   }
 }
 
-    // Add scene control button
-    Hooks.on("getSceneControlButtons", (controls) => {
-      const tokenControls = controls.tokens;
+// Add scene control button (only visible to GMs)
+Hooks.on("getSceneControlButtons", (controls) => {
+  const tokenControls = controls.tokens;
 
-      if (tokenControls && tokenControls.tools) {
-        tokenControls.tools["gurps-grapple-party"] = {
-          name: "gurps-grapple-party",
-          title: "GURPS Grapple Party",
-          icon: "fas fa-hands",
-          button: true,
-          onClick: () => {
-            const isEnabled = game.settings.get(MODULE_ID, 'moduleEnabled');
-            if (isEnabled) {
-              disableModule();
-            } else {
-              enableModule();
-            }
-          },
-          visible: game.settings.get(MODULE_ID, 'showSceneButton')
-        };
-      }
-    });
-  
+  if (tokenControls && tokenControls.tools) {
+    tokenControls.tools["gurps-grapple-party"] = {
+      name: "gurps-grapple-party",
+      title: "GURPS Grapple Party",
+      icon: "fas fa-hands",
+      button: true,
+      onClick: () => {
+        const isEnabled = game.settings.get(MODULE_ID, 'moduleEnabled');
+        if (isEnabled) {
+          disableModule();
+        } else {
+          enableModule();
+        }
+      },
+      visible: game.user.isGM && game.settings.get(MODULE_ID, 'showSceneButton')
+    };
+  }
+});

@@ -2,7 +2,7 @@
 
 # GURPS Grapple Party 🎵
 
-A sophisticated Foundry VTT module for automatic token scaling and intelligent positioning during GURPS combat encounters. Designed specifically for hexagonal grids, this module eliminates the manual hassle of token management when multiple combatants occupy the same space.
+A Foundry VTT module for automatic token scaling and intelligent positioning during GURPS combat encounters. Designed specifically for hexagonal grids, this module eliminates the manual hassle of token management when multiple combatants occupy the same space.
 
 🎵
 I’m a grapple guy,
